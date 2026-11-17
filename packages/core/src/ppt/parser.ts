@@ -362,7 +362,21 @@ function buildTextBody(styled: StyledText, env: TextEnv, anchorProp: number | un
 
 /** 形状自带属性 → 母版按级默认值 → 内建兜底 */
 function makeRun(text: string, own: TextRunProps, dft: TextRunProps, env: TextEnv, link: string | undefined): TextRun {
-  const color = own.color ?? dft.color;
+  // [MS-PPT] ColorIndexStruct：红/绿/蓝在低三字节，配色索引在高字节；
+  // 与 Escher 颜色（0x0BBGGRR，索引在低字节）相反，不能复用 escherColor()。
+  const textColor = (value: number): string | undefined => {
+    const index = value >>> 24;
+    if (index <= 0x07) {
+      const hex = (env.scheme[index] ?? '000000').padStart(6, '0');
+      return `rgb(${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)})`;
+    }
+    if (index !== 0xfe) return undefined;
+    return `rgb(${value & 0xff},${(value >>> 8) & 0xff},${(value >>> 16) & 0xff})`;
+  };
+  const color =
+    (own.color !== undefined ? textColor(own.color) : undefined)
+    ?? (dft.color !== undefined ? textColor(dft.color) : undefined)
+    ?? 'rgb(0,0,0)';
   const fonts: string[] = [];
   for (const idx of [own.fontIdx ?? dft.fontIdx, own.asianFontIdx ?? dft.asianFontIdx]) {
     const name = idx !== undefined ? env.fonts[idx] : undefined;
@@ -375,7 +389,7 @@ function makeRun(text: string, own: TextRunProps, dft: TextRunProps, env: TextEn
     u: own.underline ?? dft.underline ?? false,
     strike: false,
     size: (own.size ?? dft.size ?? 18) * (96 / 72),
-    color: color !== undefined ? escherColor(color, env.scheme) : 'rgb(0,0,0)',
+    color,
     fonts,
     link,
   };
